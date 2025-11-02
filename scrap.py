@@ -1,46 +1,58 @@
-import selenium.webdriver as webdriver
-from selenium.webdriver.chrome.service import Service
-import time
-from selenium.webdriver import Remote, ChromeOptions
-from selenium.webdriver.chromium.remote_connection import ChromiumRemoteConnection
-from selenium.webdriver.common.by import By
+import requests
 from bs4 import BeautifulSoup
-
-AUTH = 'brd-customer-hl_e87d09f6-zone-ai_capcha_solver:nxwz74mdbvt2'
-SBR_WEBDRIVER = f'https://{AUTH}@brd.superproxy.io:9515'
-
+import time
 
 def scrap_website(website):
-    print('Connecting to Scraping Browser...')
-    sbr_connection = ChromiumRemoteConnection(SBR_WEBDRIVER, 'goog', 'chrome')
-    with Remote(sbr_connection, options=ChromeOptions()) as driver:
-        driver.get(website)
-        print('Taking page screenshot to file page.png')
-        driver.get_screenshot_as_file('./page.png')
-        print('Navigated! Scraping page content...')
-        html = driver.page_source
+    try:
+        st_msg = f"🔍 Scraping {website} ..."
+        print(st_msg)
+
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+
+        response = requests.get(website, headers=headers, timeout=20)
+
+        if "captcha" in response.text.lower() or "verify" in response.text.lower():
+            print("⚠ Flipkart CAPTCHA or verification page detected.")
+            return "<html><body><h3>CAPTCHA or bot protection detected. Try changing query or wait a bit.</h3></body></html>"
+
+        response.raise_for_status()
+        html = response.text
+        print("✅ Page fetched successfully!")
         return html
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Error fetching website: {e}")
+        return f"<html><body><h3>Error fetching website: {e}</h3></body></html>"
 
 
 def extract_body_content(html_content):
-    soup = BeautifulSoup(html_content, 'html.parser')
+    soup = BeautifulSoup(html_content, "html.parser")
     body_content = soup.body
     if body_content:
         return str(body_content)
-    return ''
+    return ""
+
 
 def clean_body_content(body_content):
-    soup = BeautifulSoup(body_content, 'html.parser')
+    soup = BeautifulSoup(body_content, "html.parser")
 
-    for script_or_style in soup(['script', 'style']):
-        script_or_style.extract()
-    
-    cleaned_content = soup.get_text(separator='\n')
-    cleaned_content = '\n'.join(
+    for script_or_style in soup(["script", "style", "noscript"]):
+        script_or_style.decompose()
+
+    cleaned_content = soup.get_text(separator="\n")
+    cleaned_content = "\n".join(
         line.strip() for line in cleaned_content.splitlines() if line.strip()
     )
 
     return cleaned_content
+
 
 def split_dom_content(dom_content, max_length=6000):
     return [
